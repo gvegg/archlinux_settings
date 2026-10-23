@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Arch Waves
+Description=Чёрный фон, логотип Arch и белая надпись «Arch Linux» (в стиле GRUB noto_menu)
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/arch-waves
+ScriptFile=/usr/share/plymouth/themes/arch-waves/arch-waves.script

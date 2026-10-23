@@ -1,0 +1,82 @@
+# ============================================================================
+# arch-waves.script — заставка Plymouth «arch-waves» (вариант 2026-10-23).
+#
+# Композиция: чёрный фон, по центру логотип Arch и белая надпись
+# «Arch Linux» (Noto Sans Regular). Спиннера нет.
+#
+# При выключении/перезагрузке (Plymouth.GetMode() != "boot") не рисуется
+# ничего: остаётся чёрный экран, без анимации и без надписи.
+#
+# Скрипт выполняется plugin-ом script (plymouth). Refresh-колбэк нужен
+# только для плавного появления; шрифты не нужны — логотип и надпись
+# лежат готовыми PNG.
+# ============================================================================
+
+global.mode = Plymouth.GetMode();
+global.is_boot = (global.mode == "boot");
+
+# Чёрный фон и при загрузке, и при выключении — без смены картинки.
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+layout_done = 0;
+global.frame = 0;
+global.fade = 0;
+
+# Геометрия под 1600×900; на другом разрешении группа остаётся по центру.
+global.gap_logo_text = 30;
+
+fun do_layout ()
+{
+  if (!global.is_boot)
+    return;
+
+  global.screen_width  = Window.GetWidth();
+  global.screen_height = Window.GetHeight();
+
+  global.logo_image  = Image("arch-logo.png");
+  global.logo_sprite = Sprite(global.logo_image);
+
+  global.wordmark_image  = Image("wordmark.png");
+  global.wordmark_sprite = Sprite(global.wordmark_image);
+
+  # Вертикальная группа: логотип + отступ + надпись.
+  global.group_h = global.logo_image.GetHeight()
+                 + global.gap_logo_text
+                 + global.wordmark_image.GetHeight();
+  global.group_top = (global.screen_height - global.group_h) / 2;
+
+  global.logo_y = global.group_top;
+  global.logo_x = (global.screen_width - global.logo_image.GetWidth()) / 2;
+  global.logo_sprite.SetPosition(global.logo_x, global.logo_y, 10);
+
+  global.text_y = global.logo_y + global.logo_image.GetHeight() + global.gap_logo_text;
+  global.text_x = (global.screen_width - global.wordmark_image.GetWidth()) / 2;
+  global.wordmark_sprite.SetPosition(global.text_x, global.text_y, 10);
+
+  global.layout_done = 1;
+}
+
+fun refresh_callback ()
+{
+  # Выключение/перезагрузка: ничего не рисуем — чёрный экран.
+  if (!global.is_boot)
+    return;
+
+  if (!global.layout_done)
+    do_layout();
+
+  global.frame = global.frame + 1;
+
+  # Плавное появление за ~0.5 с; фон уже чёрный от GRUB.
+  if (global.frame < 25)
+    global.fade = global.frame / 25;
+  else
+    global.fade = 1;
+
+  global.logo_sprite.SetOpacity(global.fade);
+  global.wordmark_sprite.SetOpacity(global.fade);
+}
+
+Plymouth.SetRefreshRate(50);
+Plymouth.SetRefreshFunction(refresh_callback);

@@ -1,0 +1,102 @@
+#!/bin/sh
+exec tail -n +3 $0
+
+# ============================================================================
+# 40_custom.example — шаблон меню GRUB из трёх пунктов.
+#
+# ЭТО НЕ ГОТОВЫЙ ФАЙЛ. Он не устанавливается автоматически: UUID, имена
+# пунктов и способ загрузки Windows у каждой системы свои. Прочитай
+# комментарии и замени все значения __В_УГЛОВЫХ_СКОБКАХ__.
+#
+# Зачем вообще ручной 40_custom:
+#   * ровно три пункта, без «Advanced options for Arch Linux»;
+#   * одинаковый вид на всех системах (тема рассчитана на три плашки);
+#   * полностью контролируемая командная строка ядра;
+#   * никаких автоматических записей, которые могут поменять меню.
+#
+# Цена решения: при установке ДРУГОГО ядра (linux-lts, linux-zen и т.п.)
+# нужно вручную добавить второй menuentry с путями /vmlinuz-lts и
+# /initramfs-lts.img. Со стандартным пакетом linux этого делать не нужно.
+# ============================================================================
+#
+# 1. Узнай UUID корня и загрузочного раздела:
+#
+#      findmnt -no UUID /
+#      findmnt -no UUID /boot
+#      lsblk -f
+#
+#    Если /boot — отдельный раздел, то:
+#      __BOOT_UUID__ = UUID раздела /boot
+#      __ROOT_UUID__ = UUID корня /
+#    Если /boot НЕ отдельный (лежит внутри /), то:
+#      __BOOT_UUID__ = __ROOT_UUID__ = UUID корня.
+#
+# 2. Проверь, где лежат ядро и initramfs:
+#
+#      ls -l /boot/vmlinuz-linux /boot/initramfs-linux.img
+#
+#    В menuentry путь указывается ОТНОСИТЕЛЬНО раздела, который выбрал
+#    `search --fs-uuid`. Поэтому:
+#      * /boot отдельный:      /vmlinuz-linux, /initramfs-linux.img
+#      * /boot внутри корня:  /boot/vmlinuz-linux, /boot/initramfs-linux.img
+#
+# 3. UEFI или BIOS:
+#      * UEFI: нужны insmod part_gpt + insmod fat (как ниже);
+#      * BIOS/MBR: обычно insmod part_msdos + insmod ext2, а строку
+#        `search --fs-uuid` оставляют, но модули другие.
+#
+# 4. Windows (необязательно):
+#      efibootmgr -v
+#    Найди строку Windows Boot Manager. Её номер Boot0001 — пример.
+#    Замени 0001 на свой. `bootnext` меняет ТОЛЬКО переменную прошивки
+#    «что загрузить следующим»; содержимое диска Windows не трогается.
+#    Если Windows нет — удали весь menuentry 'Windows'.
+#
+# 5. UEFI BIOS (необязательно):
+#    `fwsetup` работает не на всех прошивках. Если пункт не нужен или
+#    не работает — удали menuentry 'UEFI BIOS'.
+#
+# 6. Установка шаблона:
+#
+#      sudo cp /etc/grub.d/40_custom \
+#              /root/40_custom.backup-$(date +%Y%m%d-%H%M%S)
+#      sudo cp 40_custom.example /etc/grub.d/40_custom
+#      sudo chmod +x /etc/grub.d/40_custom
+#      # отключи автоматические генераторы, иначе пунктов будет больше:
+#      sudo chmod -x /etc/grub.d/10_linux \
+#                    /etc/grub.d/30_uefi-firmware \
+#                    /etc/grub.d/31_efi_bootnext 2>/dev/null || true
+#      sudo grub-mkconfig -o /boot/grub/grub.cfg
+#
+#    НЕ запускай grub-install: установщик загрузчика не требуется.
+#
+# 7. Командная строка ядра в ручном menuentry НЕ берётся из
+#    GRUB_CMDLINE_LINUX_DEFAULT. Поэтому quiet/splash/root прописаны здесь.
+#    `quiet loglevel=0 systemd.show_status=no udev.log_level=0` убирают
+#    текст с экрана; `splash` включает Plymouth. Если хочешь видеть
+#    диагностику — убери quiet/loglevel/systemd.show_status/udev.log_level,
+#    но оставь splash.
+# ============================================================================
+
+menuentry 'Arch Linux' {
+	load_video
+	set gfxpayload=keep
+	insmod gzio
+	insmod part_gpt
+	insmod fat
+	search --no-floppy --fs-uuid --set=root __BOOT_UUID__
+	linux	/vmlinuz-linux root=UUID=__ROOT_UUID__ rw quiet loglevel=0 systemd.show_status=no udev.log_level=0 splash
+	initrd	/initramfs-linux.img
+}
+
+# Пример для системы с Windows. Номер Boot0001 замени на свой из efibootmgr.
+menuentry 'Windows' {
+	if bootnext 0001; then
+		reboot
+	fi
+}
+
+# Только для UEFI. На BIOS-системе этот пункт нужно удалить.
+menuentry 'UEFI BIOS' {
+	fwsetup
+}
